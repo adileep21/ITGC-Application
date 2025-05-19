@@ -410,8 +410,8 @@ elif module == "User Access Management":
 
             if dept_col and role_col:
                 try:
-                    it_roles = set(matched_data[matched_data[dept_col].str.lower().str.contains("it|information technology|i\.t\.", case=False, na=False)][role_col].dropna().unique())
-                    non_it_roles = set(matched_data[~matched_data[dept_col].str.lower().str.contains("it|information technology|i\.t\.", case=False, na=False)][role_col].dropna().unique())
+                    it_roles = set(matched_data[matched_data[dept_col].str.lower().str.contains(r"it|information technology|i\.t\.", case=False, na=False)][role_col].dropna().unique())
+                    non_it_roles = set(matched_data[~matched_data[dept_col].str.lower().str.contains(r"it|information technology|i\.t\.", case=False, na=False)][role_col].dropna().unique())
                     common_roles = it_roles & non_it_roles
 
                     if common_roles:
