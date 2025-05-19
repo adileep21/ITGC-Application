@@ -402,7 +402,7 @@ elif module == "User Access Management":
 
             # --- Role Consistency Check for IT vs Non-IT ---
             
-            st.markdown("---")
+            """st.markdown("---")
             st.subheader("🔐 IT vs Non-IT Access Validation")
 
             dept_col = st.selectbox("Select Department Column", matched_data.columns, key="dept_check")
@@ -432,4 +432,4 @@ elif module == "User Access Management":
                     else:
                         st.success("✅ No common roles between IT and non-IT users.")
                 except Exception as e:
-                    st.error(f"Error during IT vs Non-IT access comparison: {e}")
+                    st.error(f"Error during IT vs Non-IT access comparison: {e}")"""
