@@ -5,11 +5,11 @@ import io
 import datetime
 import random
 
-st.set_page_config(page_title="Combined ITGC Application", layout="wide")
-st.title("📊 Combined ITGC Application")
+st.set_page_config(page_title="ITGC Application", layout="wide")
+st.title("📊 ITGC Application")
 
 # User selection
-module = st.radio("Select Module", ["Change Management", "Incident Management", "User Access Management"])
+module = st.radio("Select Module", ["User Access Management", "Incident Management", "Change Management"])
 
 # -------------------------
 # 🔁 CHANGE MANAGEMENT FLOW
@@ -29,31 +29,43 @@ if module == "Change Management":
         st.subheader("Select Relevant Columns")
         columns = df.columns.tolist()
         col_request_id = st.selectbox("Request ID Column", columns)
-        col_raised_date = st.selectbox("Raised Date Column", columns)
-        col_resolved_date = st.selectbox("Resolved Date Column", columns)
+        columns_with_none = ["None"] + columns
+        col_raised_date = st.selectbox("Raised Date Column", columns_with_none)
+        col_resolved_date = st.selectbox("Resolved Date Column", columns_with_none)
 
         if st.button("Run Check"):
             df_checked = df.copy()
-            df_checked = df_checked.rename(columns={
-                col_request_id: "request_id",
-                col_raised_date: "raised_date",
-                col_resolved_date: "resolved_date"
-            })
+            df_checked.rename(columns={col_request_id: "request_id"}, inplace=True)
 
-            df_checked["raised_date"] = pd.to_datetime(df_checked["raised_date"], errors='coerce')
-            df_checked["resolved_date"] = pd.to_datetime(df_checked["resolved_date"], errors='coerce')
+            if col_raised_date != "None":
+                df_checked.rename(columns={col_raised_date: "raised_date"}, inplace=True)
+                df_checked["raised_date"] = pd.to_datetime(df_checked["raised_date"], errors='coerce')
+                df_checked["missing_raised"] = df_checked["raised_date"].isna()
+            else:
+                df_checked["raised_date"] = pd.NaT
+                df_checked["missing_raised"] = False
 
-            df_checked["missing_raised"] = df_checked["raised_date"].isna()
-            df_checked["missing_resolved"] = df_checked["resolved_date"].isna()
-            df_checked["resolved_before_raised"] = df_checked["resolved_date"] < df_checked["raised_date"]
-            df_checked["days_to_resolve"] = (df_checked["resolved_date"] - df_checked["raised_date"]).dt.days
+            if col_resolved_date != "None":
+                df_checked.rename(columns={col_resolved_date: "resolved_date"}, inplace=True)
+                df_checked["resolved_date"] = pd.to_datetime(df_checked["resolved_date"], errors='coerce')
+                df_checked["missing_resolved"] = df_checked["resolved_date"].isna()
+            else:
+                df_checked["resolved_date"] = pd.NaT
+                df_checked["missing_resolved"] = False
+
+            if col_raised_date != "None" and col_resolved_date != "None":
+                df_checked["resolved_before_raised"] = df_checked["resolved_date"] < df_checked["raised_date"]
+                df_checked["days_to_resolve"] = (df_checked["resolved_date"] - df_checked["raised_date"]).dt.days
+            else:
+                df_checked["resolved_before_raised"] = False
+                df_checked["days_to_resolve"] = None
 
             st.session_state.df_checked = df_checked
 
             st.subheader("📊 Summary of Findings")
-            st.write(f"❌ Missing Raised Dates: {df_checked['missing_raised'].sum()}")
-            st.write(f"❌ Missing Resolved Dates: {df_checked['missing_resolved'].sum()}")
-            st.write(f"⚠️ Resolved Before Raised: {df_checked['resolved_before_raised'].sum()}")
+            st.write(f"Missing Raised Dates: {df_checked['missing_raised'].sum()}")
+            st.write(f"Missing Resolved Dates: {df_checked['missing_resolved'].sum()}")
+            st.write(f"Resolved Before Raised: {df_checked['resolved_before_raised'].sum()}")
 
             output = BytesIO()
             df_checked.to_excel(output, index=False)
@@ -103,11 +115,23 @@ elif module == "Incident Management":
         return None
 
     def calculate_date_differences(df, start_col, end_col, resolved_col):
-        df[start_col] = pd.to_datetime(df[start_col], errors='coerce')
-        df[resolved_col] = pd.to_datetime(df[resolved_col], errors='coerce')
-        df[end_col] = pd.to_datetime(df[end_col], errors='coerce')
-        df['Start-Resolved'] = (df[resolved_col] - df[start_col]).dt.days
-        df['Resolved-Close'] = (df[end_col] - df[resolved_col]).dt.days
+        if start_col != "None":
+            df[start_col] = pd.to_datetime(df[start_col], errors='coerce')
+        if resolved_col != "None":
+            df[resolved_col] = pd.to_datetime(df[resolved_col], errors='coerce')
+        if end_col != "None":
+            df[end_col] = pd.to_datetime(df[end_col], errors='coerce')
+
+        if start_col != "None" and resolved_col != "None":
+            df['Start-Resolved'] = (df[resolved_col] - df[start_col]).dt.days
+        else:
+            df['Start-Resolved'] = None
+
+        if resolved_col != "None" and end_col != "None":
+            df['Resolved-Close'] = (df[end_col] - df[resolved_col]).dt.days
+        else:
+            df['Resolved-Close'] = None
+
         return df
 
     if uploaded_file:
@@ -117,18 +141,102 @@ elif module == "Incident Management":
             st.subheader("📋 Incident Management Columns")
             st.write("Data preview:", df.head())
 
-            columns = df.columns
-            start_col = st.selectbox("Select Start Date Column", columns)
-            resolved_col = st.selectbox("Select Resolved Date Column", columns)
-            end_col = st.selectbox("Select Close/End Date Column", columns)
+            columns_with_none = ["None"] + df.columns.tolist()
+            start_col = st.selectbox("Select Start Date Column", columns_with_none)
+            resolved_col = st.selectbox("Select Resolved Date Column", columns_with_none)
+            end_col = st.selectbox("Select Close/End Date Column", columns_with_none)
 
             df = calculate_date_differences(df, start_col, end_col, resolved_col)
 
             st.write("✅ Updated Data with Date Differences:")
-            st.dataframe(df)
+            st.dataframe(df,height=200, use_container_width=True)
 
-            st.download_button("📥 Download Updated File", data=df.to_csv(index=False),
+            st.download_button("📥 Download Updated File", data=df.to_csv(index=False).encode("utf-8"),
                                file_name="updated_incidents.csv", mime="text/csv")
+
+            # 🔁 Random Sampling
+            st.subheader("🎯 Random Sampling")
+            sample_size = st.number_input("Number of Random Samples", min_value=1, max_value=len(df), value=5)
+            if st.button("Generate Incident Sample"):
+                sample_df = df.sample(n=sample_size, random_state=42)
+                st.dataframe(sample_df,height=300, use_container_width=True)
+
+                sample_buffer = BytesIO()
+                sample_df.to_csv(sample_buffer, index=False)
+                st.download_button("📥 Download Sample Records", data=sample_buffer.getvalue(),
+                                   file_name="incident_sample.csv", mime="text/csv")
+                
+            st.subheader("⚠️ Risk Category Threshold Check")
+            risk_col = st.selectbox("Select Risk Level Column", df.columns)
+
+            if risk_col:
+                # Extract last word (risk level) regardless of delimiter or format
+                df["Parsed_Risk_Level"] = df[risk_col].astype(str).str.extract(r'([Cc]ritical|[Hh]igh|[Mm]edium|[Ll]ow)', expand=False).str.capitalize()
+
+                st.markdown("Define SLA thresholds (in days) for each risk level:")
+
+                # Start-Resolved thresholds
+                crit_threshold = st.number_input("Critical Risk Threshold (Start-Resolved)", min_value=0, value=1)
+                high_threshold = st.number_input("High Risk Threshold (Start-Resolved)", min_value=0, value=2)
+                
+                med_threshold = st.number_input("Medium Risk Threshold (Start-Resolved)", min_value=0, value=4)
+                low_threshold = st.number_input("Low Risk Threshold (Start-Resolved)", min_value=0, value=6)
+
+                # Resolved-Close thresholds
+                crit_close_threshold = st.number_input("Critical Risk Threshold (Resolved-Close)", min_value=0, value=1)
+                high_close_threshold = st.number_input("High Risk Threshold (Resolved-Close)", min_value=0, value=1)
+                med_close_threshold = st.number_input("Medium Risk Threshold (Resolved-Close)", min_value=0, value=2)
+                low_close_threshold = st.number_input("Low Risk Threshold (Resolved-Close)", min_value=0, value=3)
+
+                # Apply filters
+                def exceeds_threshold(row):
+                    risk = row["Parsed_Risk_Level"]
+                    if risk == "Critical":
+                        return (
+                            (row["Start-Resolved"] is not None and row["Start-Resolved"] > crit_threshold) or
+                            (row["Resolved-Close"] is not None and row["Resolved-Close"] > crit_close_threshold)
+                        )
+                    elif risk == "High":
+                        return (
+                            (row["Start-Resolved"] is not None and row["Start-Resolved"] > high_threshold) or
+                            (row["Resolved-Close"] is not None and row["Resolved-Close"] > high_close_threshold)
+                        )
+                    elif risk == "Medium":
+                        return (
+                            (row["Start-Resolved"] is not None and row["Start-Resolved"] > med_threshold) or
+                            (row["Resolved-Close"] is not None and row["Resolved-Close"] > med_close_threshold)
+                        )
+                    elif risk == "Low":
+                        return (
+                            (row["Start-Resolved"] is not None and row["Start-Resolved"] > low_threshold) or
+                            (row["Resolved-Close"] is not None and row["Resolved-Close"] > low_close_threshold)
+                        )
+                    return False
+
+                df["Exceeds_Threshold"] = df.apply(exceeds_threshold, axis=1)
+                observations_df = df[df["Exceeds_Threshold"] == True]
+
+                if not observations_df.empty:
+                    st.warning(f"{len(observations_df)} record(s) exceeded the threshold limits.")
+                    st.dataframe(observations_df, height=200, use_container_width=True)
+
+                    obs_buffer = BytesIO()
+                    observations_df.to_csv(obs_buffer, index=False)
+                    st.download_button("📥 Download Observations File", data=obs_buffer.getvalue(),
+                                    file_name="incident_observations.csv", mime="text/csv")
+                else:
+                    st.success("✅ All records are within threshold limits.")
+                
+                # ✅ Download full dataset with flags
+                st.subheader("📥 Download Full Data with SLA Checks")
+                full_buffer = BytesIO()
+                with pd.ExcelWriter(full_buffer, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="Full_Data")
+                st.download_button("Download Full Incident Data", data=full_buffer.getvalue(),
+                                file_name="incident_full_data.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+            
 
 # -------------------------
 # 🔍 USER ACCESS FLOW
@@ -293,6 +401,7 @@ elif module == "User Access Management":
                 )
 
             # --- Role Consistency Check for IT vs Non-IT ---
+            
             st.markdown("---")
             st.subheader("🔐 IT vs Non-IT Access Validation")
 
