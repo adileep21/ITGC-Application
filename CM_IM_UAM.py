@@ -236,8 +236,6 @@ elif module == "Incident Management":
                                 file_name="incident_full_data.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-            
-
 # -------------------------
 # 🔍 USER ACCESS FLOW
 # -------------------------
@@ -263,7 +261,7 @@ elif module == "User Access Management":
                 df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
                 if df.empty or df.columns.size == 0:
                     raise ValueError("No columns found in the Excel sheet.")
-                st.write(f"### {label} (Excel Preview - Sheet: {selected_sheet})")
+                st.write(f"### {label} ({selected_sheet})")
                 st.dataframe(df.head())
                 return df
         except Exception as e:
@@ -341,40 +339,93 @@ elif module == "User Access Management":
             st.markdown("---")
             st.subheader("📅 Dormancy & GAP Analysis")
 
-            date_col = st.selectbox("Select the Date Column for GAP Calculation", matched_data.columns)
+            date_col = st.selectbox("Select the Last Logon Date Column for GAP Calculation", matched_data.columns)
             if date_col:
                 try:
                     matched_data[date_col] = pd.to_datetime(matched_data[date_col], errors="coerce")
                     max_date = matched_data[date_col].max()
-                    matched_data["GAP"] = (max_date - matched_data[date_col]).dt.days
-                    st.success("✅ GAP column calculated and added.")
+                    st.info(f"Latest date in selected column: **{max_date.date()}**")
+                    formatted_date = max_date.strftime("%d-%m-%Y")
+                    gap_col_name = f"GAP_{formatted_date}"
+                    matched_data[gap_col_name] = (max_date - matched_data[date_col]).dt.days
+                    # matched_data["GAP"] = (max_date - matched_data[date_col]).dt.days
+                    st.success("✅ Last Login GAP column calculated and added.")
+
+                    # Ask user for threshold
+                    threshold = st.number_input("Enter dormancy threshold (in days)", min_value=1, value=30)
+
+                    # Apply threshold to the GAP column
+                    if gap_col_name in matched_data.columns:
+                        dormant_df = matched_data[matched_data[gap_col_name] > threshold]
+
+                        if not dormant_df.empty:
+                            st.warning(f"⚠️ {len(dormant_df)} record(s) exceeded the dormancy threshold of {threshold} days.")
+                            st.dataframe(dormant_df, height=200, use_container_width=True)
+
+                            # Create downloadable Excel file
+                            from io import BytesIO
+                            buffer = BytesIO()
+                            dormant_df.to_excel(buffer, index=False)
+                            buffer.seek(0)
+
+                            st.download_button(
+                                label="📥 Download Dormancy Observations",
+                                data=buffer.getvalue(),
+                                file_name=f"dormancy_observations_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        else:
+                            st.success("✅ No records exceeded the dormancy threshold.")
+
                 except Exception as e:
                     st.error(f"Error processing GAP calculation: {e}")
-
+                
             # --- AD-HR Join Date Difference ---
+            # --- Custom Join Date Differences ---
             st.markdown("---")
-            st.subheader("📐 AD - HR Joining Date Difference")
-            ad_join_col = st.selectbox("Select AD Joining Date Column", matched_data.columns, key="ad_date")
-            hr_join_col = st.selectbox("Select HR Joining Date Column", matched_data.columns, key="hr_date")
+            st.subheader("➕ Add Custom Date Difference Columns")
 
-            if ad_join_col and hr_join_col:
+            # Initialize dynamic config store
+            if "custom_diffs" not in st.session_state:
+                st.session_state.custom_diffs = []
+
+            # Form to add new difference column
+            with st.form("date_diff_form", clear_on_submit=True):
+                diff_col_name = st.text_input("Enter name for the new difference column (e.g., AD-HR)")
+                date_col1 = st.selectbox("Select first (recent) date column", matched_data.columns, key="col1")
+                date_col2 = st.selectbox("Select second (earlier) date column", matched_data.columns, key="col2")
+                add_btn = st.form_submit_button("➕ Add Date Difference Column")
+
+                if add_btn:
+                    if diff_col_name and date_col1 and date_col2:
+                        st.session_state.custom_diffs.append({
+                            "name": diff_col_name,
+                            "col1": date_col1,
+                            "col2": date_col2
+                        })
+                    else:
+                        st.warning("⚠️ Please enter a name and select both columns.")
+
+            # Calculate and add each custom date difference column
+            for entry in st.session_state.custom_diffs:
                 try:
-                    matched_data[ad_join_col] = pd.to_datetime(matched_data[ad_join_col], errors="coerce")
-                    matched_data[hr_join_col] = pd.to_datetime(matched_data[hr_join_col], errors="coerce")
-                    matched_data["AD-HR"] = (matched_data[ad_join_col] - matched_data[hr_join_col]).dt.days
-                    st.success("✅ 'AD-HR' column calculated and added.")
+                    matched_data[entry["col1"]] = pd.to_datetime(matched_data[entry["col1"]], errors="coerce")
+                    matched_data[entry["col2"]] = pd.to_datetime(matched_data[entry["col2"]], errors="coerce")
+                    matched_data[entry["name"]] = (matched_data[entry["col1"]] - matched_data[entry["col2"]]).dt.days
+                    st.success(f"✅ '{entry['name']}' column calculated successfully.")
                 except Exception as e:
-                    st.error(f"Error calculating AD-HR difference: {e}")
+                    st.error(f"Error calculating {entry['name']}: {e}")
 
-            st.subheader("📊 Final Data with GAP and AD-HR Columns")
-            st.dataframe(matched_data.head())
+            # --- Final Output ---
+            st.subheader("📊 Final Data with GAP and Date Difference Columns")
+            st.dataframe(matched_data.head(), use_container_width=True)
 
             output_buffer = io.BytesIO()
             with pd.ExcelWriter(output_buffer, engine="xlsxwriter") as writer:
                 matched_data.to_excel(writer, index=False, sheet_name="User Access Review")
 
             st.download_button(
-                label="📥 Download Final File with GAP & AD-HR",
+                label="📥 Download Final File with GAP & Date Differences",
                 data=output_buffer.getvalue(),
                 file_name=f"User_Access_Reviewed_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -400,36 +451,43 @@ elif module == "User Access Management":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-            # --- Role Consistency Check for IT vs Non-IT ---
-            
+            # --- Multiple Roles Check ---
             st.markdown("---")
-            st.subheader("🔐 IT vs Non-IT Access Validation")
+            st.subheader("🧍‍♂️ Multiple Roles Per User Check")
 
-            dept_col = st.selectbox("Select Department Column", matched_data.columns, key="dept_check")
-            role_col = st.selectbox("Select Role/Access Column", matched_data.columns, key="role_check")
+            user_col = st.selectbox("Select the User Identifier Column", matched_data.columns, key="user_col")
+            role_col = st.selectbox("Select the Role Column", matched_data.columns, key="role_col")
+            min_roles = st.number_input("Minimum Number of Roles Allowed Per User", min_value=1, value=1, step=1)
 
-            if dept_col and role_col:
+            if user_col and role_col:
                 try:
-                    it_roles = set(matched_data[matched_data[dept_col].str.lower().str.contains("it|information technology|i\.t\.", case=False, na=False)][role_col].dropna().unique())
-                    non_it_roles = set(matched_data[~matched_data[dept_col].str.lower().str.contains("it|information technology|i\.t\.", case=False, na=False)][role_col].dropna().unique())
-                    common_roles = it_roles & non_it_roles
+                    # Count roles per user
+                    role_counts = matched_data.groupby(user_col)[role_col].nunique().reset_index()
+                    role_counts = role_counts.rename(columns={role_col: "Role_Count"})
 
-                    if common_roles:
-                        flagged_df = matched_data[matched_data[role_col].isin(common_roles)]
-                        st.warning("⚠️ Common roles found between IT and non-IT users:")
-                        st.dataframe(flagged_df)
+                    # Filter users exceeding threshold
+                    flagged_users = role_counts[role_counts["Role_Count"] > min_roles]
 
-                        flagged_buffer = io.BytesIO()
-                        with pd.ExcelWriter(flagged_buffer, engine="xlsxwriter") as writer:
-                            flagged_df.to_excel(writer, index=False, sheet_name="IT_NonIT_Conflict")
+                    if not flagged_users.empty:
+                        st.warning(f"⚠️ {len(flagged_users)} user(s) found with more than {min_roles} unique roles.")
+
+                        # Merge back to get original records
+                        flagged_df = matched_data[matched_data[user_col].isin(flagged_users[user_col])]
+                        st.dataframe(flagged_df, height=400, use_container_width=True)
+
+                        from io import BytesIO
+                        flagged_buffer = BytesIO()
+                        flagged_df.to_excel(flagged_buffer, index=False)
+                        flagged_buffer.seek(0)
 
                         st.download_button(
-                            label="📥 Download Flagged Records",
+                            label="📥 Download Users with Multiple Roles",
                             data=flagged_buffer.getvalue(),
-                            file_name=f"IT_NonIT_Conflicts_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+                            file_name=f"multiple_roles_flagged_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
                     else:
-                        st.success("✅ No common roles between IT and non-IT users.")
+                        st.success("✅ No users have more roles than the defined threshold.")
                 except Exception as e:
-                    st.error(f"Error during IT vs Non-IT access comparison: {e}")
+                    st.error(f"Error during multiple roles check: {e}")
+                    
