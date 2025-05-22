@@ -253,7 +253,7 @@ elif module == "User Access Management":
                 if df.empty or df.columns.size == 0:
                     raise ValueError("No columns found in the CSV file.")
                 st.write(f"### {label} (CSV Preview)")
-                st.dataframe(df.head())
+                st.dataframe(df,height=200, use_container_width=True)
                 return df
             else:
                 sheets = pd.ExcelFile(uploaded_file).sheet_names
