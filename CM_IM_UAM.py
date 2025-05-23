@@ -262,7 +262,7 @@ elif module == "User Access Management":
                 if df.empty or df.columns.size == 0:
                     raise ValueError("No columns found in the Excel sheet.")
                 st.write(f"### {label} ({selected_sheet})")
-                st.dataframe(df, height=300, use_container_width=True)
+                st.dataframe(df, height=200, use_container_width=True)
                 return df
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
@@ -473,7 +473,7 @@ elif module == "User Access Management":
 
                         # Merge back to get original records
                         flagged_df = matched_data[matched_data[user_col].isin(flagged_users[user_col])]
-                        st.dataframe(flagged_df, height=400, use_container_width=True)
+                        st.dataframe(flagged_df, height=200, use_container_width=True)
 
                         from io import BytesIO
                         flagged_buffer = BytesIO()
