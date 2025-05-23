@@ -253,7 +253,7 @@ elif module == "User Access Management":
                 if df.empty or df.columns.size == 0:
                     raise ValueError("No columns found in the CSV file.")
                 st.write(f"### {label} (CSV Preview)")
-                st.dataframe(df,height=200, use_container_width=True)
+                st.dataframe(df, height=200, use_container_width=True)
                 return df
             else:
                 sheets = pd.ExcelFile(uploaded_file).sheet_names
@@ -262,7 +262,7 @@ elif module == "User Access Management":
                 if df.empty or df.columns.size == 0:
                     raise ValueError("No columns found in the Excel sheet.")
                 st.write(f"### {label} ({selected_sheet})")
-                st.dataframe(df.head())
+                st.dataframe(df, height=300, use_container_width=True)
                 return df
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
@@ -313,7 +313,7 @@ elif module == "User Access Management":
 
             st.markdown("---")
             st.subheader("✅ Final Merged Dataset")
-            st.dataframe(matched_data.head())
+            st.dataframe(matched_data, height=200, use_container_width=True)
 
             export_format = st.radio("Choose export format", ["Excel", "CSV"])
             if export_format == "Excel":
@@ -418,7 +418,7 @@ elif module == "User Access Management":
 
             # --- Final Output ---
             st.subheader("📊 Final Data with GAP and Date Difference Columns")
-            st.dataframe(matched_data.head(), use_container_width=True)
+            st.dataframe(matched_data, height=200, use_container_width=True)
 
             output_buffer = io.BytesIO()
             with pd.ExcelWriter(output_buffer, engine="xlsxwriter") as writer:
